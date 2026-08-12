@@ -2,15 +2,14 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import WorkspaceGrid from "@/components/WorkspaceGrid";
 import { SignInButton, SignOutButton } from "@/components/AuthButtons";
+import { RoomActions } from "@/components/RoomActions";
 
 // `async` on a page component means this runs on the SERVER before anything is
-// sent to the browser. That's why we can query the database directly here --
-// this code never reaches the user's machine.
+// sent to the browser. That's why it can query the database directly.
 
 export default async function Home() {
   const session = await auth();
 
-  // Only look up the profile if someone is actually signed in.
   const user = session?.user?.id
     ? await prisma.user.findUnique({
         where: { id: session.user.id },
@@ -40,26 +39,27 @@ export default async function Home() {
 
       <section className="mb-16">
         {user ? (
-          <div className="flex flex-wrap items-center gap-4 rounded-lg border border-ink-line bg-ink-raised p-4">
-            {user.image && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={user.image}
-                alt=""
-                width={44}
-                height={44}
-                className="rounded-full"
-              />
-            )}
-            <div className="mr-auto">
-              <p className="font-mono text-sm text-chalk">{user.username}</p>
-              <p className="text-xs text-chalk-dim">
-                rating {user.rating} &middot; unranked
-              </p>
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center gap-4 rounded-lg border border-ink-line bg-ink-raised p-4">
+              {user.image && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.image}
+                  alt=""
+                  width={44}
+                  height={44}
+                  className="rounded-full"
+                />
+              )}
+              <div>
+                <p className="font-mono text-sm text-chalk">{user.username}</p>
+                <p className="text-xs text-chalk-dim">
+                  rating {user.rating} &middot; unranked
+                </p>
+              </div>
             </div>
-            <p className="font-mono text-xs text-chalk-dim">
-              rooms arrive in step 2b
-            </p>
+
+            <RoomActions />
           </div>
         ) : (
           <div>
