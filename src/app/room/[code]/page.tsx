@@ -95,7 +95,7 @@ export default async function RoomPage({
   });
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-16">
+    <main className="px-4 py-8 sm:px-6">
       <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-xs tracking-[0.3em] text-chalk-dim">

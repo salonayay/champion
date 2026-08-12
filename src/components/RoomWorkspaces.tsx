@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { LANGUAGES, LANGUAGE_KEYS, type LanguageKey } from "@/lib/languages";
 
@@ -26,11 +26,16 @@ type Props = {
   currentUserId: string;
 };
 
-const PANEL_WIDTH = "w-[min(640px,66vw)]";
+const MIN_WIDTH = 380;
+const MIN_REMAINING = 220;
 
 export function RoomWorkspaces({ seats, currentUserId }: Props) {
   const [language, setLanguage] = useState<LanguageKey>("PYTHON");
   const [code, setCode] = useState<string>(LANGUAGES.PYTHON.starter);
+  const [panelWidth, setPanelWidth] = useState(760);
+  const [dragging, setDragging] = useState(false);
+
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
   function changeLanguage(next: LanguageKey) {
     const untouched = code.trim() === LANGUAGES[language].starter.trim();
@@ -38,12 +43,31 @@ export function RoomWorkspaces({ seats, currentUserId }: Props) {
     if (untouched) setCode(LANGUAGES[next].starter);
   }
 
+  function startDrag(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function onDrag(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging || !scrollerRef.current) return;
+    const rect = scrollerRef.current.getBoundingClientRect();
+    const next = e.clientX - rect.left;
+    const max = Math.max(MIN_WIDTH, rect.width - MIN_REMAINING);
+    setPanelWidth(Math.min(Math.max(next, MIN_WIDTH), max));
+  }
+
+  function endDrag(e: React.PointerEvent<HTMLDivElement>) {
+    setDragging(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+
   const mine = seats.find((s) => s?.userId === currentUserId) ?? null;
   const others = seats.filter((s) => s?.userId !== currentUserId);
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="mb-3 flex items-center justify-between gap-4">
         <h2 className="font-mono text-xs tracking-[0.2em] text-chalk-dim">
           WORKSPACES
         </h2>
@@ -64,10 +88,16 @@ export function RoomWorkspaces({ seats, currentUserId }: Props) {
         </label>
       </div>
 
-      <div className="flex gap-3 overflow-x-auto pb-3">
+      <div
+        ref={scrollerRef}
+        className={`flex gap-3 overflow-x-auto pb-3 ${
+          dragging ? "select-none" : ""
+        }`}
+      >
         {mine && (
           <div
-            className={`sticky left-0 z-20 shrink-0 ${PANEL_WIDTH} overflow-hidden rounded-lg border border-flood/50 bg-ink-raised shadow-[10px_0_20px_-10px_rgba(0,0,0,0.7)]`}
+            style={{ width: panelWidth }}
+            className="relative sticky left-0 z-20 shrink-0 overflow-hidden rounded-lg border border-flood/50 bg-ink-raised shadow-[10px_0_20px_-10px_rgba(0,0,0,0.7)]"
           >
             <PanelHeader
               occupant={mine}
@@ -75,16 +105,30 @@ export function RoomWorkspaces({ seats, currentUserId }: Props) {
               isMine
               languageLabel={LANGUAGES[language].label}
             />
-            <div className="h-96">
+            <div className="h-[62vh] min-h-[380px]">
               <CodeEditor value={code} language={language} onChange={setCode} />
             </div>
+
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize your workspace"
+              onPointerDown={startDrag}
+              onPointerMove={onDrag}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+              className={`absolute right-0 top-0 h-full w-2 cursor-col-resize transition-colors ${
+                dragging ? "bg-flood" : "bg-transparent hover:bg-flood/40"
+              }`}
+            />
           </div>
         )}
 
         {others.map((occupant, i) => (
           <div
             key={occupant?.userId ?? `empty-${i}`}
-            className={`shrink-0 ${PANEL_WIDTH} overflow-hidden rounded-lg border ${
+            style={{ width: panelWidth }}
+            className={`shrink-0 overflow-hidden rounded-lg border ${
               occupant
                 ? "border-ink-line bg-ink-raised"
                 : "border-dashed border-ink-line/60"
@@ -95,7 +139,7 @@ export function RoomWorkspaces({ seats, currentUserId }: Props) {
               seatIndex={occupant?.seat ?? i}
               languageLabel={occupant ? LANGUAGES[language].label : "empty"}
             />
-            <div className="flex h-96 items-center justify-center px-6 text-center">
+            <div className="flex h-[62vh] min-h-[380px] items-center justify-center px-6 text-center">
               <span className="font-mono text-xs text-chalk-dim">
                 {occupant
                   ? "their code appears here once live sync is wired up"
@@ -106,8 +150,9 @@ export function RoomWorkspaces({ seats, currentUserId }: Props) {
         ))}
       </div>
 
-      <p className="mt-2 font-mono text-xs text-chalk-dim">
-        Scroll sideways to see the others &middot; typing isn&rsquo;t shared yet
+      <p className="mt-1 font-mono text-xs text-chalk-dim">
+        Drag the right edge of your panel to resize &middot; scroll sideways for
+        the others
       </p>
     </div>
   );
