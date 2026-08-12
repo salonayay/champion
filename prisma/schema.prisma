@@ -1,0 +1,253 @@
+// CHAMPION — database schema
+//
+// Read this top to bottom. Each block is a table; each field is a column.
+// The @relation lines are how tables point at each other.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+// These four fields (name, email, emailVerified, image) are named exactly what
+// Auth.js expects. It fills them in automatically from your Google profile.
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  // Our own fields, nothing to do with Auth.js.
+  username  String?  @unique // generated from the email on first sign-in
+  rating    Int      @default(1200) // Elo-style, adjusted after each match
+  createdAt DateTime @default(now())
+
+  accounts     Account[]
+  sessions     Session[]
+  hostedRooms  Room[]             @relation("RoomHost")
+  memberships  RoomMember[]
+  participants MatchParticipant[]
+  submissions  Submission[]
+}
+
+// One row per external login. If you later add GitHub sign-in, the same user
+// gets a second Account row — one person, two ways in.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String // "google"
+  providerAccountId String // your Google account's id
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+// One row per active login. The browser holds only sessionToken in a cookie;
+// everything else stays server-side.
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Required by Auth.js. Unused with Google-only sign-in, but it expects it.
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Rooms — the lobby your friends join
+// ---------------------------------------------------------------------------
+
+model Room {
+  id        String     @id @default(cuid())
+  code      String     @unique // short shareable code, e.g. "K7Q2XM"
+  name      String?
+  status    RoomStatus @default(WAITING)
+  maxSeats  Int        @default(4)
+  createdAt DateTime   @default(now())
+
+  hostId String
+  host   User   @relation("RoomHost", fields: [hostId], references: [id])
+
+  members RoomMember[]
+  matches Match[]
+
+  @@index([code])
+}
+
+enum RoomStatus {
+  WAITING // in the lobby, waiting for people
+  IN_MATCH // a problem is live
+  CLOSED
+}
+
+model RoomMember {
+  id       String    @id @default(cuid())
+  seat     Int // 0..3 — which workspace tile this person owns
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Nobody can hold two seats in the same room, and no seat is double-booked.
+  @@unique([roomId, userId])
+  @@unique([roomId, seat])
+}
+
+// ---------------------------------------------------------------------------
+// Problems — YOUR problem bank, with test cases you own
+// ---------------------------------------------------------------------------
+
+model Problem {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  title       String
+  statement   String // markdown
+  difficulty  Difficulty
+  tags        String[] // ["dp", "greedy", "graphs"]
+  timeLimitMs Int        @default(2000)
+  memoryLimitMb Int      @default(256)
+
+  // Where it originally came from, so you can credit it and link out.
+  sourceName String? // "Codeforces", "CodeContests"
+  sourceUrl  String?
+
+  testCases TestCase[]
+  matches   Match[]
+
+  @@index([difficulty])
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model TestCase {
+  id       String  @id @default(cuid())
+  input    String
+  expected String
+  isSample Boolean @default(false) // samples are shown to the player; the rest are hidden
+
+  problemId String
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([problemId])
+}
+
+// ---------------------------------------------------------------------------
+// Matches — one problem, one race
+// ---------------------------------------------------------------------------
+
+model Match {
+  id        String      @id @default(cuid())
+  status    MatchStatus @default(PENDING)
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  roomId    String
+  room      Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  problemId String
+  problem   Problem @relation(fields: [problemId], references: [id])
+
+  // Set by the SERVER when the first accepted submission lands. Never by a client.
+  winnerId String?
+
+  participants MatchParticipant[]
+  submissions  Submission[]
+
+  @@index([roomId])
+}
+
+enum MatchStatus {
+  PENDING
+  LIVE
+  FINISHED
+  ABANDONED
+}
+
+model MatchParticipant {
+  id       String @id @default(cuid())
+  language Language @default(PYTHON)
+  code     String   @default("") // last known editor contents, for replay and reconnects
+
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  @@unique([matchId, userId])
+}
+
+enum Language {
+  PYTHON
+  CPP
+  JAVA
+  JAVASCRIPT
+}
+
+// ---------------------------------------------------------------------------
+// Submissions — every attempt, judged
+// ---------------------------------------------------------------------------
+
+model Submission {
+  id          String   @id @default(cuid())
+  code        String
+  language    Language
+  verdict     Verdict  @default(PENDING)
+  runtimeMs   Int?
+  failedCase  Int? // index of the first test that failed, for feedback
+  errorOutput String?
+
+  // The clock that decides the winner. Stamped on the server the moment the
+  // submission arrives — not when the client says it was sent.
+  submittedAt DateTime @default(now())
+  judgedAt    DateTime?
+
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  @@index([matchId, submittedAt])
+}
+
+enum Verdict {
+  PENDING
+  RUNNING
+  ACCEPTED
+  WRONG_ANSWER
+  TIME_LIMIT_EXCEEDED
+  MEMORY_LIMIT_EXCEEDED
+  RUNTIME_ERROR
+  COMPILE_ERROR
+}

@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* Design tokens. Tailwind v4 reads these and generates utilities from them,
+   so `bg-ink` and `text-flood` work anywhere without a config file. */
+@theme {
+  --color-ink: #14102a;
+  --color-ink-raised: #1e1840;
+  --color-ink-line: #2c2456;
+  --color-flood: #ffb020;
+  --color-chalk: #edeaf7;
+  --color-chalk-dim: #9a93bc;
+  --color-verdict: #4ade80;
+
+  --font-display: "Archivo", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html {
+  background: var(--color-ink);
+  color: var(--color-chalk);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every interactive element gets a visible focus ring. Keyboard users exist. */
+:focus-visible {
+  outline: 2px solid var(--color-flood);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
