@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
+    "@monaco-editor/react": "^4.6.0",
     "@prisma/client": "^6.2.1",
     "next": "^15.1.6",
     "next-auth": "^5.0.0-beta.25",

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { addMemberToRoom, leaveRoom } from "@/app/actions/rooms";
+import { RoomWorkspaces } from "@/components/RoomWorkspaces";
 
 // In Next.js 15, params arrives as a Promise, so it has to be awaited.
 // This page lives at src/app/room/[code]/page.tsx — the [code] folder is what
@@ -120,54 +121,23 @@ export default async function RoomPage({
         </form>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {seats.map((member, i) => (
-          <div
-            key={i}
-            className={`rounded-lg border p-4 ${
-              member
-                ? "border-ink-line bg-ink-raised"
-                : "border-dashed border-ink-line/60"
-            }`}
-          >
-            {member ? (
-              <div className="flex items-center gap-3">
-                {member.user.image && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={member.user.image}
-                    alt=""
-                    width={36}
-                    height={36}
-                    className="rounded-full"
-                  />
-                )}
-                <div>
-                  <p className="font-mono text-sm text-chalk">
-                    {member.user.username}
-                    {member.userId === room.hostId && (
-                      <span className="ml-2 text-xs text-flood">host</span>
-                    )}
-                    {member.userId === session.user.id && (
-                      <span className="ml-2 text-xs text-chalk-dim">you</span>
-                    )}
-                  </p>
-                  <p className="font-mono text-xs text-chalk-dim">
-                    seat {member.seat}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="font-mono text-sm text-chalk-dim">
-                seat {i} &middot; empty
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
+      <RoomWorkspaces
+        seats={seats.map((m, i) =>
+          m
+            ? {
+                seat: i,
+                userId: m.userId,
+                username: m.user.username,
+                image: m.user.image,
+                isHost: m.userId === room.hostId,
+              }
+            : null,
+        )}
+        currentUserId={session.user.id}
+      />
 
       <p className="mt-8 font-mono text-xs text-chalk-dim">
-        Refresh to see who joined &mdash; live updates arrive in step 3.
+        Refresh to see who joined &mdash; live presence arrives in step 3b.
       </p>
     </main>
   );

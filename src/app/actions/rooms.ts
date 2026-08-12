@@ -49,13 +49,12 @@ export async function createRoom(): Promise<ActionResult> {
   // Without this, the room could be created and then the host's membership
   // could fail — leaving a room nobody is in, including its own creator.
   // $transaction makes the pair atomic.
- await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const room = await tx.room.create({ data: { code, hostId: userId } });
     await tx.roomMember.create({
       data: { roomId: room.id, userId, seat: 0 },
     });
   });
-
   // redirect() throws internally to stop execution, so nothing after it runs.
   // That's why it sits outside the try/catch pattern you might expect.
   redirect(`/room/${code}`);
