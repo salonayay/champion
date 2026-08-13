@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { addMemberToRoom, leaveRoom } from "@/app/actions/rooms";
 import { RoomWorkspaces } from "@/components/RoomWorkspaces";
+import { ProblemPanel } from "@/components/ProblemPanel";
 
 // In Next.js 15, params arrives as a Promise, so it has to be awaited.
 // This page lives at src/app/room/[code]/page.tsx — the [code] folder is what
@@ -34,7 +35,56 @@ export default async function RoomPage({
     },
   });
 
-  if (!room) notFound(); // renders Next.js's 404 page
+  if (!room) notFound();
+
+  const match = await prisma.match.findFirst({
+    where: { roomId: room.id, status: { in: ["PENDING", "LIVE", "FINISHED"] } },
+    orderBy: { startedAt: "desc" },
+    include: {
+      problem: { include: { testCases: { where: { isSample: true } } } },
+    },
+  });
+
+  const winner = match?.winnerId
+    ? await prisma.user.findUnique({
+        where: { id: match.winnerId },
+        select: { username: true },
+      })
+    : null;
+
+  // Every attempt in this match, oldest first, so we can work out each
+  // player's latest result and how many tries it took them.
+  const rawAttempts = match
+    ? await prisma.submission.findMany({
+        where: { matchId: match.id },
+        orderBy: { submittedAt: "asc" },
+        select: {
+          userId: true,
+          kind: true,
+          verdict: true,
+          passedCount: true,
+          totalCount: true,
+        },
+      })
+    : [];
+
+  const attempts: Record<string, {
+    kind: string;
+    verdict: string;
+    passedCount: number | null;
+    totalCount: number | null;
+    attemptNumber: number;
+  }> = {};
+
+  for (const a of rawAttempts) {
+    const previous = attempts[a.userId]?.attemptNumber ?? 0;
+    attempts[a.userId] = { ...a, attemptNumber: previous + 1 };
+  }
+
+  const problemOptions = await prisma.problem.findMany({
+    select: { id: true, title: true, difficulty: true },
+    orderBy: { difficulty: "asc" },
+  }); // renders Next.js's 404 page
 
   const me = room.members.find((m) => m.userId === session.user.id);
 
@@ -121,7 +171,19 @@ export default async function RoomPage({
         </form>
       </header>
 
+      <ProblemPanel
+        code={room.code}
+        isHost={room.hostId === session.user.id}
+        problem={match?.problem ?? null}
+        options={problemOptions}
+      />
+
       <RoomWorkspaces
+        roomCode={room.code}
+        matchId={match?.id ?? null}
+        problemId={match?.problemId ?? null}
+        winnerName={winner?.username ?? null}
+        attempts={attempts}
         seats={seats.map((m, i) =>
           m
             ? {

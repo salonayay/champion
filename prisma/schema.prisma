@@ -224,6 +224,15 @@ model Submission {
   code        String
   language    Language
   verdict     Verdict  @default(PENDING)
+
+  // RUN checks only the samples and never decides a winner.
+  // SUBMIT runs every test and can end the match.
+  kind        AttemptKind @default(SUBMIT)
+
+  // Stored so other players' panels can show "3 of 5 passed" without
+  // re-running anything.
+  passedCount Int?
+  totalCount  Int?
   runtimeMs   Int?
   failedCase  Int? // index of the first test that failed, for feedback
   errorOutput String?
@@ -239,6 +248,11 @@ model Submission {
   user    User   @relation(fields: [userId], references: [id])
 
   @@index([matchId, submittedAt])
+}
+
+enum AttemptKind {
+  RUN
+  SUBMIT
 }
 
 enum Verdict {

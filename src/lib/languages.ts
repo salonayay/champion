@@ -1,14 +1,22 @@
-// Our database stores language as an enum (PYTHON, CPP, ...). Monaco uses its
-// own lowercase ids ("python", "cpp"). This file is the bridge between them,
-// plus the starter code each language gets.
+// Our database stores language as an enum (PYTHON, CPP, ...). This file maps
+// those to Monaco's editor ids and holds the starter template for each.
+//
+// Every starter reads from standard input and prints to standard output,
+// because that's how the judge works: it pipes the test case in, and compares
+// what comes out.
 
 export const LANGUAGES = {
   PYTHON: {
     label: "Python",
     monacoId: "python",
-    starter: `def solve(nums):
+    starter: `import sys
+
+def main():
+    data = sys.stdin.read().split()
     # your code here
-    pass
+    print()
+
+main()
 `,
   },
   CPP: {
@@ -18,7 +26,11 @@ export const LANGUAGES = {
 using namespace std;
 
 int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
     // your code here
+
     return 0;
 }
 `,
@@ -26,8 +38,13 @@ int main() {
   JAVA: {
     label: "Java",
     monacoId: "java",
-    starter: `public class Main {
-    public static void main(String[] args) {
+    starter: `import java.util.*;
+import java.io.*;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+
         // your code here
     }
 }
@@ -36,16 +53,13 @@ int main() {
   JAVASCRIPT: {
     label: "JavaScript",
     monacoId: "javascript",
-    starter: `function solve(nums) {
-  // your code here
-}
+    starter: `const data = require("fs").readFileSync(0, "utf8").split(/\\s+/);
+
+// your code here
 `,
   },
 } as const;
 
-// `keyof typeof LANGUAGES` means "any key of that object" — so LanguageKey is
-// "PYTHON" | "CPP" | "JAVA" | "JAVASCRIPT". Add a language above and this type
-// updates itself, with no second list to keep in sync.
 export type LanguageKey = keyof typeof LANGUAGES;
 
 export const LANGUAGE_KEYS = Object.keys(LANGUAGES) as LanguageKey[];
