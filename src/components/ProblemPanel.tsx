@@ -1,4 +1,3 @@
-import { chooseProblem } from "@/app/actions/match";
 
 type SampleCase = { id: string; input: string; expected: string };
 
@@ -44,39 +43,6 @@ export function ProblemPanel({ code, isHost, problem, options }: Props) {
           </>
         )}
 
-        {isHost && (
-          <form action={chooseProblem} className="ml-auto flex gap-2">
-            <input type="hidden" name="code" value={code} />
-            <select
-              name="problemId"
-              defaultValue=""
-              className="rounded border border-ink-line bg-ink px-2 py-1 font-mono text-xs text-chalk"
-            >
-              <option value="" disabled>
-                pick a problem
-              </option>
-              {options.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.title}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="rounded border border-ink-line px-3 py-1 font-mono text-xs text-chalk transition-colors hover:border-flood"
-            >
-              set
-            </button>
-            <button
-              type="submit"
-              name="random"
-              value="1"
-              className="rounded bg-flood px-3 py-1 font-mono text-xs text-ink transition-opacity hover:opacity-90"
-            >
-              random
-            </button>
-          </form>
-        )}
       </div>
 
       {!problem ? (

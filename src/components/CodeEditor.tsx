@@ -27,19 +27,21 @@ export default function CodeEditor({
       base: "vs-dark",
       inherit: true, // keep vs-dark's rules, override only what we list
       rules: [
-        { token: "comment", foreground: "6f679b", fontStyle: "italic" },
-        { token: "keyword", foreground: "ffb020" },
-        { token: "string", foreground: "9ad8a0" },
-        { token: "number", foreground: "d3b0ff" },
+        { token: "comment", foreground: "5c5c5c", fontStyle: "italic" },
+        { token: "keyword", foreground: "ffd60a" },
+        { token: "string", foreground: "e0e0e0" },
+        { token: "number", foreground: "ffe98a" },
+        { token: "type", foreground: "ffd60a" },
+        { token: "function", foreground: "ffffff" },
       ],
       colors: {
-        "editor.background": "#1e1840",
-        "editor.foreground": "#edeaf7",
-        "editorLineNumber.foreground": "#4a4275",
-        "editorLineNumber.activeForeground": "#9a93bc",
-        "editor.selectionBackground": "#2c2456",
-        "editor.lineHighlightBackground": "#251e4a",
-        "editorCursor.foreground": "#ffb020",
+        "editor.background": "#141414",
+        "editor.foreground": "#ffffff",
+        "editorLineNumber.foreground": "#3a3a3a",
+        "editorLineNumber.activeForeground": "#ffd60a",
+        "editor.selectionBackground": "#333333",
+        "editor.lineHighlightBackground": "#1c1c1c",
+        "editorCursor.foreground": "#ffd60a",
       },
     });
   };

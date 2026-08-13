@@ -1,15 +1,25 @@
 @import "tailwindcss";
 
 /* Design tokens. Tailwind v4 reads these and generates utilities from them,
-   so `bg-ink` and `text-flood` work anywhere without a config file. */
+   so bg-ink and text-flood work anywhere without a config file.
+   Change a value here and every element using it updates. */
 @theme {
-  --color-ink: #14102a;
-  --color-ink-raised: #1e1840;
-  --color-ink-line: #2c2456;
-  --color-flood: #ffb020;
-  --color-chalk: #edeaf7;
-  --color-chalk-dim: #9a93bc;
-  --color-verdict: #4ade80;
+  /* Blacks -- the page, raised surfaces, and hairline borders. */
+  --color-ink: #0a0a0a;
+  --color-ink-raised: #141414;
+  --color-ink-line: #2a2a2a;
+
+  /* The one accent. Used for anything active, owned, or winning. */
+  --color-flood: #ffd60a;
+
+  /* Whites. */
+  --color-chalk: #ffffff;
+  --color-chalk-dim: #8a8a8a;
+
+  /* Success reads as yellow in this palette rather than green -- in a
+     black/yellow/white system, yellow already means "this is the good one".
+     Red stays as the only other hue, which makes failure unmissable. */
+  --color-verdict: #ffd60a;
 
   --font-display: "Archivo", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
@@ -23,10 +33,26 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Every interactive element gets a visible focus ring. Keyboard users exist. */
 :focus-visible {
   outline: 2px solid var(--color-flood);
   outline-offset: 3px;
+}
+
+/* Thin scrollbars so the horizontal workspace strip doesn't get a chunky
+   grey bar cutting across a black layout. */
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-line);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { broadcast } from "@/lib/broadcast";
 import { runTestCase } from "@/lib/judge";
 import type { LanguageKey } from "@/lib/languages";
 
@@ -202,6 +203,12 @@ export async function submitSolution(input: {
       data: { winnerId: userId, status: "FINISHED", endedAt: new Date() },
     });
     wonMatch = claimed.count === 1;
+
+    // Tell every browser the round is over, so their timers stop at the same
+    // moment and the scoreboard updates without a refresh.
+    if (wonMatch) {
+      await broadcast(input.roomCode, "roundEnded", { userId });
+    }
   }
 
   revalidatePath(`/room/${input.roomCode}`);

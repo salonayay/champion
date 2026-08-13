@@ -20,17 +20,55 @@ export type ActionResult = { error: string } | undefined;
 // Create a room
 // ---------------------------------------------------------------------------
 
-export async function createRoom(): Promise<ActionResult> {
+export async function createRoom(formData: FormData): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user?.id) {
     return { error: "You need to sign in first." };
   }
 
   const userId = session.user.id;
-  let code = "";
 
-  // Try up to 5 times to find an unused code. A collision is extremely
-  // unlikely, but the database would reject a duplicate, so we handle it.
+  // Clamp everything the form sends. Never trust a number from a browser --
+  // anyone can edit the HTML and post whatever they like.
+  const totalRounds = Math.min(10, Math.max(1, Number(formData.get("totalRounds")) || 3));
+  const maxSeats = Math.min(5, Math.max(2, Number(formData.get("maxSeats")) || 5));
+
+  // `as const` keeps these as literal types rather than widening to `string`,
+  // which is what Prisma needs for an enum column.
+  const rawDifficulty = String(formData.get("difficulty") ?? "");
+  const difficulty =
+    rawDifficulty === "EASY"
+      ? ("EASY" as const)
+      : rawDifficulty === "MEDIUM"
+        ? ("MEDIUM" as const)
+        : rawDifficulty === "HARD"
+          ? ("HARD" as const)
+          : null;
+
+  // The form sends date, hour (1-12), minute and AM/PM separately, because a
+  // native datetime picker shows 24-hour time on most systems.
+  const rawDate = String(formData.get("startDate") ?? "").trim();
+  const rawHour = Number(formData.get("startHour"));
+  const rawMinute = Number(formData.get("startMinute"));
+  const meridiem = String(formData.get("startMeridiem") ?? "AM");
+
+  let scheduledFor: Date | null = null;
+
+  if (rawDate && rawHour >= 1 && rawHour <= 12) {
+    // 12-hour to 24-hour. The quirk is 12 itself: 12 AM is hour 0, 12 PM is
+    // hour 12. The modulo handles both -- 12 % 12 is 0, then PM adds 12.
+    const hour24 = (rawHour % 12) + (meridiem === "PM" ? 12 : 0);
+    const minute = rawMinute >= 0 && rawMinute <= 59 ? rawMinute : 0;
+
+    const [y, m, d] = rawDate.split("-").map(Number);
+    const parsed = new Date(y, m - 1, d, hour24, minute, 0, 0);
+
+    if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+      scheduledFor = parsed;
+    }
+  }
+
+  let code = "";
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = generateRoomCode();
     const taken = await prisma.room.findUnique({ where: { code: candidate } });
@@ -44,19 +82,15 @@ export async function createRoom(): Promise<ActionResult> {
     return { error: "Couldn't generate a room code. Try again." };
   }
 
-  // A transaction: both writes succeed, or neither does.
-  //
-  // Without this, the room could be created and then the host's membership
-  // could fail — leaving a room nobody is in, including its own creator.
-  // $transaction makes the pair atomic.
   await prisma.$transaction(async (tx) => {
-    const room = await tx.room.create({ data: { code, hostId: userId } });
+    const room = await tx.room.create({
+      data: { code, hostId: userId, totalRounds, maxSeats, difficulty, scheduledFor },
+    });
     await tx.roomMember.create({
       data: { roomId: room.id, userId, seat: 0 },
     });
   });
-  // redirect() throws internally to stop execution, so nothing after it runs.
-  // That's why it sits outside the try/catch pattern you might expect.
+
   redirect(`/room/${code}`);
 }
 

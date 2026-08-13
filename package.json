@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "lsof -ti:3000 | xargs kill -9 2>/dev/null; next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -11,7 +11,7 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:seed": "node --env-file=.env prisma/seed.mjs",
-    "dev:socket": "node server/index.mjs"
+    "dev:socket": "lsof -ti:4000 | xargs kill -9 2>/dev/null; node server/index.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

@@ -87,8 +87,14 @@ model Room {
   id        String     @id @default(cuid())
   code      String     @unique // short shareable code, e.g. "K7Q2XM"
   name      String?
-  status    RoomStatus @default(WAITING)
-  maxSeats  Int        @default(4)
+  status      RoomStatus @default(WAITING)
+  maxSeats    Int        @default(5)
+  totalRounds Int        @default(3)
+
+  // When set, nobody can enter the room until this moment -- not even the
+  // host. Null means the room is open immediately.
+  scheduledFor DateTime?
+  difficulty  Difficulty? // null means "any difficulty"
   createdAt DateTime   @default(now())
 
   hostId String
@@ -174,6 +180,10 @@ model Match {
   startedAt DateTime?
   endedAt   DateTime?
 
+  // Round 1, 2, 3... within its room. Drives scoreboard ordering and tells us
+  // which round comes next.
+  roundNumber Int @default(1)
+
   roomId    String
   room      Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
   problemId String
@@ -185,6 +195,7 @@ model Match {
   participants MatchParticipant[]
   submissions  Submission[]
 
+  @@unique([roomId, roundNumber])
   @@index([roomId])
 }
 

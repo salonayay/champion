@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { addMemberToRoom, leaveRoom } from "@/app/actions/rooms";
 import { RoomWorkspaces } from "@/components/RoomWorkspaces";
 import { ProblemPanel } from "@/components/ProblemPanel";
+import { RoundBar } from "@/components/RoundBar";
+import { Scoreboard } from "@/components/Scoreboard";
 
 // In Next.js 15, params arrives as a Promise, so it has to be awaited.
 // This page lives at src/app/room/[code]/page.tsx — the [code] folder is what
@@ -81,10 +83,87 @@ export default async function RoomPage({
     attempts[a.userId] = { ...a, attemptNumber: previous + 1 };
   }
 
+  const allMatches = await prisma.match.findMany({
+    where: { roomId: room.id },
+    orderBy: { roundNumber: "asc" },
+    include: {
+      problem: { select: { title: true, difficulty: true } },
+      submissions: { select: { userId: true, kind: true } },
+    },
+  });
+
+  // Winner names in one query rather than one per row.
+  const winnerIds = allMatches
+    .map((m) => m.winnerId)
+    .filter((id): id is string => Boolean(id));
+
+  const winnerUsers = winnerIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: winnerIds } },
+        select: { id: true, username: true },
+      })
+    : [];
+  const nameById = new Map(winnerUsers.map((u) => [u.id, u.username]));
+
+  const scoreboardRows = allMatches
+    .filter((m) => m.status === "FINISHED")
+    .map((m) => ({
+      roundNumber: m.roundNumber,
+      problemTitle: m.problem.title,
+      difficulty: m.problem.difficulty,
+      winnerName: m.winnerId ? (nameById.get(m.winnerId) ?? null) : null,
+      timeMs:
+        m.startedAt && m.endedAt
+          ? m.endedAt.getTime() - m.startedAt.getTime()
+          : null,
+      // How many times the winner had to submit before it was accepted.
+      attempts: m.winnerId
+        ? m.submissions.filter(
+            (sub) => sub.userId === m.winnerId && sub.kind === "SUBMIT",
+          ).length
+        : 0,
+    }));
+
+  const roundsPlayed = allMatches.length;
+  const liveMatch = allMatches.find(
+    (m) => m.status === "LIVE" || m.status === "PENDING",
+  );
+
   const problemOptions = await prisma.problem.findMany({
     select: { id: true, title: true, difficulty: true },
     orderBy: { difficulty: "asc" },
   }); // renders Next.js's 404 page
+
+  // A scheduled room is sealed until its time -- including for the host. The
+  // check is here on the server, so nobody gets in by guessing the URL.
+  if (room.scheduledFor && room.scheduledFor.getTime() > Date.now()) {
+    const opensAt = room.scheduledFor;
+    return (
+      <main className="mx-auto max-w-md px-6 py-24 text-center">
+        <p className="font-mono text-xs tracking-[0.3em] text-chalk-dim">
+          LOCKED
+        </p>
+        <h1 className="mt-2 font-mono text-4xl tracking-[0.2em] text-flood">
+          {room.code}
+        </h1>
+        <p className="mt-6 text-chalk-dim">This room opens at</p>
+        <p className="mt-1 font-mono text-lg text-chalk">
+          {opensAt.toLocaleString()}
+        </p>
+        <p className="mt-6 font-mono text-xs text-chalk-dim">
+          {room.totalRounds} rounds &middot;{" "}
+          {room.difficulty ? room.difficulty.toLowerCase() : "any difficulty"}{" "}
+          &middot; {room.members.length} of {room.maxSeats} joined
+        </p>
+        <a
+          href="/"
+          className="mt-8 inline-block text-sm text-chalk-dim hover:text-chalk"
+        >
+          Back home
+        </a>
+      </main>
+    );
+  }
 
   const me = room.members.find((m) => m.userId === session.user.id);
 
@@ -170,6 +249,20 @@ export default async function RoomPage({
           </button>
         </form>
       </header>
+
+      <RoundBar
+        code={room.code}
+        isHost={room.hostId === session.user.id}
+        totalRounds={room.totalRounds}
+        roundsPlayed={roundsPlayed}
+        currentRound={liveMatch?.roundNumber ?? null}
+        startedAt={match?.startedAt?.toISOString() ?? null}
+        endedAt={match?.endedAt?.toISOString() ?? null}
+        difficulty={room.difficulty}
+        canStart={!liveMatch && roundsPlayed < room.totalRounds}
+      />
+
+      <Scoreboard rows={scoreboardRows} />
 
       <ProblemPanel
         code={room.code}
