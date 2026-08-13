@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { broadcast } from "@/lib/broadcast";
 
 export async function chooseProblem(formData: FormData) {
   const session = await auth();
@@ -53,4 +54,7 @@ export async function chooseProblem(formData: FormData) {
   });
 
   revalidatePath(`/room/${code}`);
+
+  // Everyone else's browser reloads and picks up the new problem.
+  await broadcast(code, "newRound");
 }

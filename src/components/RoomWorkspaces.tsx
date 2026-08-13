@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { LANGUAGES, LANGUAGE_KEYS, type LanguageKey } from "@/lib/languages";
 import { runSamples, submitSolution, type RunOutcome } from "@/app/actions/submit";
+import { useRoomSocket, type LiveAttempt } from "@/lib/useRoomSocket";
 
 const CodeEditor = dynamic(() => import("@/components/CodeEditor"), {
   ssr: false,
@@ -29,13 +30,7 @@ type Props = {
   matchId: string | null;
   problemId: string | null;
   winnerName: string | null;
-  attempts: Record<string, {
-    kind: string;
-    verdict: string;
-    passedCount: number | null;
-    totalCount: number | null;
-    attemptNumber: number;
-  }>;
+  attempts: Record<string, LiveAttempt>;
 };
 
 const MIN_WIDTH = 380;
@@ -64,13 +59,48 @@ export function RoomWorkspaces({
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState<null | "run" | "submit">(null);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
+  const [myAttemptCount, setMyAttemptCount] = useState(
+    attempts[currentUserId]?.attemptNumber ?? 0,
+  );
 
   const scrollerRef = useRef<HTMLDivElement>(null);
+
+  const mine = seats.find((s) => s?.userId === currentUserId) ?? null;
+  const others = seats.filter((s) => s?.userId !== currentUserId);
+
+  const {
+    connected,
+    peers,
+    liveCode,
+    liveAttempts,
+    winner: liveWinner,
+    publishCode,
+    publishAttempt,
+    publishWin,
+  } = useRoomSocket({
+    roomCode,
+    userId: currentUserId,
+    username: mine?.username ?? null,
+    image: mine?.image ?? null,
+    seat: mine?.seat ?? 0,
+  });
+
+  const onlineIds = new Set(peers.map((p) => p.userId));
+
+  function handleCodeChange(next: string) {
+    setCode(next);
+    publishCode(next, language);
+  }
 
   function changeLanguage(next: LanguageKey) {
     const untouched = code.trim() === LANGUAGES[language].starter.trim();
     setLanguage(next);
-    if (untouched) setCode(LANGUAGES[next].starter);
+    if (untouched) {
+      setCode(LANGUAGES[next].starter);
+      publishCode(LANGUAGES[next].starter, next);
+    } else {
+      publishCode(code, next);
+    }
   }
 
   function startDrag(e: React.PointerEvent<HTMLDivElement>) {
@@ -92,11 +122,33 @@ export function RoomWorkspaces({
     e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
+  // Tell the room how an attempt went, so everyone's badge updates at once.
+  function announce(result: RunOutcome, kind: "RUN" | "SUBMIT") {
+    const n = myAttemptCount + 1;
+    setMyAttemptCount(n);
+    publishAttempt({
+      kind,
+      verdict: result.verdict,
+      passedCount: result.cases.filter((c) => c.verdict === "ACCEPTED").length,
+      totalCount: result.cases.length,
+      attemptNumber: n,
+    });
+    if (result.wonMatch) publishWin();
+  }
+
   async function handleRun() {
     if (!problemId) return;
     setBusy("run");
     setOutcome(null);
-    setOutcome(await runSamples({ problemId, source: code, language }));
+    const result = await runSamples({
+      problemId,
+      source: code,
+      language,
+      matchId,
+      roomCode,
+    });
+    setOutcome(result);
+    announce(result, "RUN");
     setBusy(null);
   }
 
@@ -104,21 +156,34 @@ export function RoomWorkspaces({
     if (!matchId) return;
     setBusy("submit");
     setOutcome(null);
-    setOutcome(
-      await submitSolution({ matchId, source: code, language, roomCode }),
-    );
+    const result = await submitSolution({ matchId, source: code, language, roomCode });
+    setOutcome(result);
+    announce(result, "SUBMIT");
     setBusy(null);
   }
 
-  const mine = seats.find((s) => s?.userId === currentUserId) ?? null;
-  const others = seats.filter((s) => s?.userId !== currentUserId);
+  const shownWinner = liveWinner ?? winnerName;
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-mono text-xs tracking-[0.2em] text-chalk-dim">
-          WORKSPACES
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="font-mono text-xs tracking-[0.2em] text-chalk-dim">
+            WORKSPACES
+          </h2>
+          <span
+            className={`flex items-center gap-1.5 font-mono text-[10px] ${
+              connected ? "text-verdict" : "text-chalk-dim"
+            }`}
+          >
+            <span
+              className={`inline-block h-1.5 w-1.5 rounded-full ${
+                connected ? "bg-verdict" : "bg-chalk-dim"
+              }`}
+            />
+            {connected ? `${peers.length} online` : "offline"}
+          </span>
+        </div>
 
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-chalk-dim">
@@ -156,9 +221,9 @@ export function RoomWorkspaces({
         </div>
       </div>
 
-      {winnerName && (
+      {shownWinner && (
         <div className="mb-3 rounded border border-verdict/40 bg-verdict/10 px-4 py-2 font-mono text-xs text-verdict">
-          {winnerName} won this round
+          {shownWinner} won this round
         </div>
       )}
 
@@ -177,11 +242,12 @@ export function RoomWorkspaces({
               occupant={mine}
               seatIndex={mine.seat}
               isMine
+              online
               languageLabel={LANGUAGES[language].label}
             />
-            <AttemptBadge attempt={attempts[mine.userId]} />
+            <AttemptBadge attempt={liveAttempts[mine.userId] ?? attempts[mine.userId]} />
             <div className="h-[58vh] min-h-[340px]">
-              <CodeEditor value={code} language={language} onChange={setCode} />
+              <CodeEditor value={code} language={language} onChange={handleCodeChange} />
             </div>
 
             <div
@@ -199,32 +265,80 @@ export function RoomWorkspaces({
           </div>
         )}
 
-        {others.map((occupant, i) => (
-          <div
-            key={occupant?.userId ?? `empty-${i}`}
-            style={{ width: panelWidth }}
-            className={`shrink-0 overflow-hidden rounded-lg border ${
-              occupant
-                ? "border-ink-line bg-ink-raised"
-                : "border-dashed border-ink-line/60"
-            }`}
-          >
-            <PanelHeader
-              occupant={occupant}
-              seatIndex={occupant?.seat ?? i}
-              languageLabel={occupant ? LANGUAGES[language].label : "empty"}
-            />
-            {occupant && <AttemptBadge attempt={attempts[occupant.userId]} />}
-            <div className="flex h-[58vh] min-h-[340px] items-center justify-center px-6 text-center">
-              <span className="font-mono text-xs text-chalk-dim">
-                {occupant
-                  ? "their code appears here once live sync is wired up"
-                  : "waiting for a player"}
-              </span>
+        {others.map((occupant, i) => {
+          const live = occupant ? liveCode[occupant.userId] : undefined;
+          const theirLanguage = (live?.language as LanguageKey) ?? "PYTHON";
+
+          return (
+            <div
+              key={occupant?.userId ?? `empty-${i}`}
+              style={{ width: panelWidth }}
+              className={`shrink-0 overflow-hidden rounded-lg border ${
+                occupant
+                  ? "border-ink-line bg-ink-raised"
+                  : "border-dashed border-ink-line/60"
+              }`}
+            >
+              <PanelHeader
+                occupant={occupant}
+                seatIndex={occupant?.seat ?? i}
+                online={occupant ? onlineIds.has(occupant.userId) : false}
+                languageLabel={
+                  occupant ? LANGUAGES[theirLanguage].label : "empty"
+                }
+              />
+              {occupant && (
+                <AttemptBadge
+                  attempt={liveAttempts[occupant.userId] ?? attempts[occupant.userId]}
+                />
+              )}
+              <div className="h-[58vh] min-h-[340px]">
+                {occupant && live ? (
+                  <CodeEditor value={live.code} language={theirLanguage} readOnly />
+                ) : (
+                  <div className="flex h-full items-center justify-center px-6 text-center">
+                    <span className="font-mono text-xs text-chalk-dim">
+                      {occupant ? "hasn't started typing" : "waiting for a player"}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+function AttemptBadge({ attempt }: { attempt?: LiveAttempt }) {
+  if (!attempt) {
+    return (
+      <div className="border-b border-ink-line px-3 py-1.5 font-mono text-[10px] text-chalk-dim">
+        no attempts yet
+      </div>
+    );
+  }
+
+  const passed = attempt.passedCount ?? 0;
+  const total = attempt.totalCount ?? 0;
+  const good = attempt.verdict === "ACCEPTED";
+
+  return (
+    <div
+      className={`flex items-center gap-2 border-b px-3 py-1.5 font-mono text-[10px] ${
+        good
+          ? "border-verdict/30 bg-verdict/10 text-verdict"
+          : "border-red-400/30 bg-red-400/10 text-red-400"
+      }`}
+    >
+      <span className="font-medium">{passed} / {total} passed</span>
+      <span className="opacity-80">
+        {(VERDICT_LABEL[attempt.verdict] ?? attempt.verdict).toLowerCase()}
+      </span>
+      <span className="ml-auto text-chalk-dim">
+        {attempt.kind === "RUN" ? "run" : "submit"} &middot; attempt {attempt.attemptNumber}
+      </span>
     </div>
   );
 }
@@ -291,73 +405,39 @@ function ResultStrip({ outcome }: { outcome: RunOutcome }) {
   );
 }
 
-function AttemptBadge({
-  attempt,
-}: {
-  attempt?: {
-    kind: string;
-    verdict: string;
-    passedCount: number | null;
-    totalCount: number | null;
-    attemptNumber: number;
-  };
-}) {
-  if (!attempt) {
-    return (
-      <div className="border-b border-ink-line px-3 py-1.5 font-mono text-[10px] text-chalk-dim">
-        no attempts yet
-      </div>
-    );
-  }
-
-  const passed = attempt.passedCount ?? 0;
-  const total = attempt.totalCount ?? 0;
-  const good = attempt.verdict === "ACCEPTED";
-
-  return (
-    <div
-      className={`flex items-center gap-2 border-b px-3 py-1.5 font-mono text-[10px] ${
-        good
-          ? "border-verdict/30 bg-verdict/10 text-verdict"
-          : "border-red-400/30 bg-red-400/10 text-red-400"
-      }`}
-    >
-      <span className="font-medium">
-        {passed} / {total} passed
-      </span>
-      <span className="opacity-80">
-        {(VERDICT_LABEL[attempt.verdict] ?? attempt.verdict).toLowerCase()}
-      </span>
-      <span className="ml-auto text-chalk-dim">
-        {attempt.kind === "RUN" ? "run" : "submit"} &middot; attempt{" "}
-        {attempt.attemptNumber}
-      </span>
-    </div>
-  );
-}
-
 function PanelHeader({
   occupant,
   seatIndex,
   isMine = false,
+  online,
   languageLabel,
 }: {
   occupant: SeatOccupant | null;
   seatIndex: number;
   isMine?: boolean;
+  online: boolean;
   languageLabel: string;
 }) {
   return (
     <div className="flex items-center gap-2 border-b border-ink-line px-3 py-2">
       {occupant?.image && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={occupant.image} alt="" width={20} height={20} className="rounded-full" />
+        <img
+          src={occupant.image}
+          alt=""
+          width={20}
+          height={20}
+          className={`rounded-full ${online ? "" : "opacity-40 grayscale"}`}
+        />
       )}
-      <span className="font-mono text-xs text-chalk">
+      <span className={`font-mono text-xs ${online ? "text-chalk" : "text-chalk-dim"}`}>
         {occupant?.username ?? `seat ${seatIndex}`}
       </span>
       {occupant?.isHost && <span className="font-mono text-[10px] text-flood">host</span>}
       {isMine && <span className="font-mono text-[10px] text-chalk-dim">you</span>}
+      {occupant && !online && (
+        <span className="font-mono text-[10px] text-chalk-dim">away</span>
+      )}
       <span className="ml-auto font-mono text-[10px] text-chalk-dim">{languageLabel}</span>
     </div>
   );
