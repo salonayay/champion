@@ -12,9 +12,12 @@ export const LANGUAGES = {
     starter: `import sys
 
 def main():
-    data = sys.stdin.read().split()
-    # your code here
-    print()
+    data = sys.stdin.buffer.read().split()
+    pos = 0
+    t = int(data[pos]); pos += 1
+    for _ in range(t):
+        # read this test case and solve it
+        pass
 
 main()
 `,
@@ -29,7 +32,11 @@ int main() {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    // your code here
+    int t;
+    cin >> t;
+    while (t--) {
+        // read this test case and solve it
+    }
 
     return 0;
 }
@@ -44,8 +51,10 @@ import java.io.*;
 public class Main {
     public static void main(String[] args) throws IOException {
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-
-        // your code here
+        int t = Integer.parseInt(br.readLine().trim());
+        while (t-- > 0) {
+            // read this test case and solve it
+        }
     }
 }
 `,
@@ -54,8 +63,11 @@ public class Main {
     label: "JavaScript",
     monacoId: "javascript",
     starter: `const data = require("fs").readFileSync(0, "utf8").split(/\\s+/);
-
-// your code here
+let pos = 0;
+const t = Number(data[pos++]);
+for (let i = 0; i < t; i++) {
+  // read this test case and solve it
+}
 `,
   },
 } as const;
