@@ -89,6 +89,7 @@ export default async function RoomPage({
     include: {
       problem: { select: { title: true, difficulty: true } },
       submissions: { select: { userId: true, kind: true } },
+      ratingChanges: { select: { userId: true, delta: true } },
     },
   });
 
@@ -122,6 +123,10 @@ export default async function RoomPage({
             (sub) => sub.userId === m.winnerId && sub.kind === "SUBMIT",
           ).length
         : 0,
+      myDelta:
+        m.ratingChanges.find((rc) => rc.userId === session.user.id)?.delta ??
+        null,
+      settled: m.settledAt !== null,
     }));
 
   const roundsPlayed = allMatches.length;

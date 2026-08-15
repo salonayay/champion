@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { UserBadge } from "@/components/UserBadge";
 
 export const metadata: Metadata = {
   title: "CHAMPION — race your friends to the solution",
@@ -26,7 +27,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <UserBadge />
+        {children}
+      </body>
     </html>
   );
 }

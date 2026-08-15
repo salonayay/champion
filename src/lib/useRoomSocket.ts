@@ -72,6 +72,10 @@ export function useRoomSocket(opts: Options) {
 
     socket.on("won", (msg: { username: string | null }) => setWinner(msg.username));
 
+    // The round is over. Reload so the server re-renders with the finished
+    // match: frozen timer, scoreboard row, and the host's next-round button.
+    socket.on("roundEnded", () => window.location.reload());
+
     socket.on("newRound", () => window.location.reload());
 
     return () => {

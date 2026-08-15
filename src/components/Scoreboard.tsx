@@ -5,6 +5,8 @@ type Row = {
   winnerName: string | null;
   timeMs: number | null;
   attempts: number;
+  myDelta: number | null;
+  settled: boolean;
 };
 
 function formatTime(ms: number | null) {
@@ -30,6 +32,7 @@ export function Scoreboard({ rows }: { rows: Row[] }) {
             <th className="px-4 py-2 font-normal">winner</th>
             <th className="px-4 py-2 font-normal">time</th>
             <th className="px-4 py-2 font-normal">attempts</th>
+            <th className="px-4 py-2 font-normal">your rating</th>
           </tr>
         </thead>
         <tbody>
@@ -54,6 +57,17 @@ export function Scoreboard({ rows }: { rows: Row[] }) {
               </td>
               <td className="px-4 py-2 font-mono text-xs text-chalk-dim">
                 {r.attempts || "--"}
+              </td>
+              <td className="px-4 py-2 font-mono text-xs">
+                {!r.settled ? (
+                  <span className="text-chalk-dim">pending</span>
+                ) : r.myDelta === null || r.myDelta === 0 ? (
+                  <span className="text-chalk-dim">no change</span>
+                ) : r.myDelta > 0 ? (
+                  <span className="text-flood">+{r.myDelta}</span>
+                ) : (
+                  <span className="text-red-400">{r.myDelta}</span>
+                )}
               </td>
             </tr>
           ))}

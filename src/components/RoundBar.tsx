@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { startRound } from "@/app/actions/match";
+import { startRound, endMatch } from "@/app/actions/match";
 
 type Props = {
   code: string;
@@ -19,16 +19,20 @@ type Props = {
 // every player's clock shows the same elapsed time regardless of when their
 // page loaded or how far off their laptop clock is.
 function Timer({ startedAt, endedAt }: { startedAt: string; endedAt: string | null }) {
-  const [now, setNow] = useState(() => Date.now());
+  // Starts null so the server and the first client render produce identical
+  // HTML. Without this, the server renders one second and the browser renders
+  // the next, and React complains the two don't match.
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
-    if (endedAt) return; // round is over, stop ticking
+    setNow(Date.now()); // first real value, browser-side only
+    if (endedAt) return;
     const id = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(id);
   }, [endedAt]);
 
   const start = new Date(startedAt).getTime();
-  const end = endedAt ? new Date(endedAt).getTime() : now;
+  const end = endedAt ? new Date(endedAt).getTime() : (now ?? start);
   const ms = Math.max(0, end - start);
 
   const minutes = Math.floor(ms / 60000);
@@ -58,7 +62,7 @@ export function RoundBar({
   difficulty,
   canStart,
 }: Props) {
-  const allDone = roundsPlayed >= totalRounds && !startedAt;
+  const allDone = roundsPlayed >= totalRounds && (!startedAt || Boolean(endedAt));
   const nextRound = Math.min(roundsPlayed + 1, totalRounds);
 
   return (
@@ -92,13 +96,13 @@ export function RoundBar({
         </p>
       )}
 
-      {allDone && (
+      {allDone && !isHost && (
         <p className="ml-auto font-mono text-xs text-flood">
           all {totalRounds} rounds complete
         </p>
       )}
 
-      {isHost && !allDone && (
+      {isHost && (
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {canStart && (
             <form action={startRound}>
@@ -108,6 +112,19 @@ export function RoundBar({
                 className="rounded bg-flood px-5 py-2 font-mono text-xs font-medium text-ink transition-opacity hover:opacity-90"
               >
                 start round {nextRound}
+              </button>
+            </form>
+          )}
+
+          {/* Settles the final round -- there's no next round to trigger it. */}
+          {roundsPlayed > 0 && (!startedAt || endedAt) && (
+            <form action={endMatch}>
+              <input type="hidden" name="code" value={code} />
+              <button
+                type="submit"
+                className="rounded border border-ink-line px-4 py-2 font-mono text-xs text-chalk-dim transition-colors hover:border-flood hover:text-chalk"
+              >
+                end match
               </button>
             </form>
           )}

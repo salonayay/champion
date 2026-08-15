@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { broadcast } from "@/lib/broadcast";
+import { settleRound } from "@/lib/settle";
 
 // Only the host controls rounds. Every check below happens on the SERVER --
 // hiding the buttons from non-hosts is a courtesy, this is the actual rule.
@@ -74,6 +75,14 @@ export async function startRound(formData: FormData) {
   // A race needs someone to race against.
   if (room.members.length < 2) return;
 
+  // Settle the previous round before opening a new one. Anyone who kept
+  // working after losing the race and got it accepted keeps their rating.
+  const previous = await prisma.match.findFirst({
+    where: { roomId: room.id, status: "FINISHED", settledAt: null },
+    orderBy: { roundNumber: "desc" },
+  });
+  if (previous) await settleRound(previous.id);
+
   const played = await prisma.match.count({ where: { roomId: room.id } });
   if (played >= room.totalRounds) return; // all rounds done
 
@@ -122,4 +131,28 @@ export async function startRound(formData: FormData) {
 
   revalidatePath(`/room/${code}`);
   await broadcast(code, "newRound", { roundNumber: match.roundNumber });
+}
+
+// The last round has no "next round" to trigger settling, so the host ends the
+// match explicitly. This also lets a host close out early.
+export async function endMatch(formData: FormData) {
+  const code = String(formData.get("code") ?? "");
+  const ctx = await requireHost(code);
+  if (!ctx) return;
+
+  const unsettled = await prisma.match.findMany({
+    where: { roomId: ctx.room.id, status: "FINISHED", settledAt: null },
+  });
+
+  for (const m of unsettled) {
+    await settleRound(m.id);
+  }
+
+  await prisma.room.update({
+    where: { id: ctx.room.id },
+    data: { status: "FINISHED" },
+  });
+
+  revalidatePath(`/room/${code}`);
+  await broadcast(code, "newRound");
 }
