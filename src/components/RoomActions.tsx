@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { createRoom, joinRoom, type ActionResult } from "@/app/actions/rooms";
+import { DatePicker } from "@/components/DatePicker";
 
 function SubmitButton({
   children,
@@ -137,11 +138,9 @@ export function RoomActions() {
                   starts at (optional)
                 </span>
                 <div className="flex gap-2">
-                  <input
-                    name="startDate"
-                    type="date"
-                    className="flex-1 rounded border border-ink-line bg-ink px-3 py-2 font-mono text-sm text-chalk"
-                  />
+                  <div className="flex-1">
+                    <DatePicker name="startDate" />
+                  </div>
                   <input
                     name="startHour"
                     type="number"

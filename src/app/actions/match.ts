@@ -81,7 +81,8 @@ export async function startRound(formData: FormData) {
     where: { roomId: room.id, status: "FINISHED", settledAt: null },
     orderBy: { roundNumber: "desc" },
   });
-  if (previous) await settleRound(previous.id);
+  const settled = previous ? await settleRound(previous.id) : null;
+  if (settled) await broadcast(code, "roundSettled", settled);
 
   const played = await prisma.match.count({ where: { roomId: room.id } });
   if (played >= room.totalRounds) return; // all rounds done
@@ -144,15 +145,20 @@ export async function endMatch(formData: FormData) {
     where: { roomId: ctx.room.id, status: "FINISHED", settledAt: null },
   });
 
+  const summaries: NonNullable<Awaited<ReturnType<typeof settleRound>>>[] = [];
   for (const m of unsettled) {
-    await settleRound(m.id);
+    const s = await settleRound(m.id);
+    if (s) summaries.push(s);
   }
 
+  // CLOSED, not FINISHED -- rooms and matches use different enums. A room
+  // that's done is closed; a match that's done is finished.
   await prisma.room.update({
     where: { id: ctx.room.id },
-    data: { status: "FINISHED" },
+    data: { status: "CLOSED" },
   });
 
   revalidatePath(`/room/${code}`);
+  for (const s of summaries) await broadcast(code, "roundSettled", s);
   await broadcast(code, "newRound");
 }
