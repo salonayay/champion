@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { ResultsButton, type StandingRow } from "@/components/ResultsButton";
 import { addMemberToRoom, leaveRoom } from "@/app/actions/rooms";
 import { RoomWorkspaces } from "@/components/RoomWorkspaces";
 import { ProblemPanel } from "@/components/ProblemPanel";
@@ -30,7 +31,7 @@ export default async function RoomPage({
       // the nested include we'd have their ids but not their names, and we'd
       // need a second query per member — the "N+1 query" problem.
       members: {
-        include: { user: { select: { username: true, image: true } } },
+        include: { user: { select: { id: true, username: true, image: true, rating: true } } },
         orderBy: { seat: "asc" },
       },
       host: { select: { username: true } },
@@ -89,7 +90,7 @@ export default async function RoomPage({
     include: {
       problem: { select: { title: true, difficulty: true } },
       submissions: { select: { userId: true, kind: true } },
-      ratingChanges: { select: { userId: true, delta: true } },
+      ratingChanges: { select: { userId: true, delta: true, ratingAfter: true } },
     },
   });
 
@@ -228,6 +229,25 @@ export default async function RoomPage({
     return room.members.find((m) => m.seat === i) ?? null;
   });
 
+
+  const settledMatches = allMatches.filter((m) => m.settledAt);
+
+  const standings: StandingRow[] = room.members.map((mem) => ({
+    userId: mem.userId,
+    username: mem.user.username ?? "player",
+    rounds: settledMatches.length,
+    wins: settledMatches.filter((m) => m.winnerId === mem.userId).length,
+    delta: settledMatches.reduce(
+      (sum, m) =>
+        sum +
+        m.ratingChanges
+          .filter((rc) => rc.userId === mem.userId)
+          .reduce((t, rc) => t + rc.delta, 0),
+      0,
+    ),
+    rating: mem.user.rating,
+  }));
+
   return (
     <main className="px-4 py-8 sm:px-6">
       <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
@@ -244,6 +264,13 @@ export default async function RoomPage({
           </p>
         </div>
 
+        <div className="flex items-center gap-3">
+          <ResultsButton
+            rows={standings}
+            meId={session.user.id}
+            roundsDone={settledMatches.length}
+            roundsTotal={room.totalRounds}
+          />
         <form action={leaveRoom}>
           <input type="hidden" name="code" value={room.code} />
           <button
@@ -253,6 +280,7 @@ export default async function RoomPage({
             Leave room
           </button>
         </form>
+        </div>
       </header>
 
       <RoundBar
